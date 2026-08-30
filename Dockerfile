@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# LibreOffice, Font tools aur standard Hindi fonts install karein
+# Install LibreOffice, Font tools and standard Devanagari/Hindi packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice \
     wget \
@@ -8,15 +8,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fontconfig \
     fonts-dejavu \
     fonts-liberation \
-    fonts-mangal \
     fonts-gargi \
     fonts-kalimati \
     fonts-indic \
     fonts-lohit-deva \
     fonts-samyak-deva \
+    fonts-noto-ui-core \
     && rm -rf /var/lib/apt/lists/*
 
-# Google Fonts se Poppins Font download karke system me install karein
+# Google Fonts repository se Poppins Fonts direct install karein
 RUN mkdir -p /usr/share/fonts/truetype/poppins && \
     wget https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-ExtraBold.ttf -O /usr/share/fonts/truetype/poppins/Poppins-ExtraBold.ttf && \
     wget https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Bold.ttf -O /usr/share/fonts/truetype/poppins/Poppins-Bold.ttf && \
