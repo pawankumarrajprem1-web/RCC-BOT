@@ -1,11 +1,27 @@
 FROM python:3.11-slim
 
-# LibreOffice aur Fonts install karein PDF conversion ke liye
+# LibreOffice, Font tools aur standard Hindi fonts install karein
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice \
+    wget \
+    unzip \
+    fontconfig \
     fonts-dejavu \
     fonts-liberation \
+    fonts-mangal \
+    fonts-gargi \
+    fonts-kalimati \
+    fonts-indic \
+    fonts-lohit-deva \
+    fonts-samyak-deva \
     && rm -rf /var/lib/apt/lists/*
+
+# Google Fonts se Poppins Font download karke system me install karein
+RUN mkdir -p /usr/share/fonts/truetype/poppins && \
+    wget https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-ExtraBold.ttf -O /usr/share/fonts/truetype/poppins/Poppins-ExtraBold.ttf && \
+    wget https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Bold.ttf -O /usr/share/fonts/truetype/poppins/Poppins-Bold.ttf && \
+    wget https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Regular.ttf -O /usr/share/fonts/truetype/poppins/Poppins-Regular.ttf && \
+    fc-cache -f -v
 
 WORKDIR /app
 
