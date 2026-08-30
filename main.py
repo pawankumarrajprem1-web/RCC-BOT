@@ -14,7 +14,7 @@ from aiogram.enums import ParseMode, ChatAction
 from pptx import Presentation
 
 # Telegram Bot Token
-API_TOKEN = os.getenv("BOT_TOKEN", "8705690496:AAG7yX9v97D-WoHK6ZfC4gAAB5vCEMLVuUA")
+API_TOKEN = os.getenv("BOT_TOKEN", "8847912181:AAEuCBPyXI2J11CljajDXS86_1_yB6tzQfs")
 
 # Custom PPT Template Path (Relative for Linux/Render)
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "template.pptx")
