@@ -14,7 +14,7 @@ from aiogram.enums import ParseMode, ChatAction
 from pptx import Presentation
 
 # Telegram Bot Token (Render Environment Variable se read hoga)
-API_TOKEN = os.getenv("BOT_TOKEN", "8705690496:AAG7yX9v97D-WoHK6ZfC4gAAB5vCEMLVuUA")
+API_TOKEN = os.getenv("BOT_TOKEN", "8847912181:AAEo_H5nCi2IK1Y9N8fl4VaW6NuCPIjzTrg")
 
 # Relative PPT Template Path (Sahi folder path)
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "template.pptx")
