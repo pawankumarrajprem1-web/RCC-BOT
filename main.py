@@ -13,10 +13,10 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode, ChatAction
 from pptx import Presentation
 
-# Telegram Bot Token (Render Environment Variable se read hoga)
-API_TOKEN = os.getenv("BOT_TOKEN", "8847912181:AAEo_H5nCi2IK1Y9N8fl4VaW6NuCPIjzTrg")
+# Telegram Bot Token
+API_TOKEN = os.getenv("BOT_TOKEN", "8705690496:AAG7yX9v97D-WoHK6ZfC4gAAB5vCEMLVuUA")
 
-# Relative PPT Template Path (Sahi folder path)
+# Custom PPT Template Path (Relative for Linux/Render)
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "template.pptx")
 
 # Bot Initialization
@@ -34,10 +34,11 @@ def convert_pptx_to_pdf(input_pptx, output_dir="."):
     cmd = ["libreoffice", "--headless", "--convert-to", "pdf", input_pptx, "--outdir", output_dir]
     subprocess.run(cmd, check=True)
 
-# Duplicate Template Slide
+# Duplicate Template Slide preserving shapes and buttons
 def duplicate_slide(prs, source_slide):
     blank_layout = prs.slide_layouts[6]
     target_slide = prs.slides.add_slide(blank_layout)
+    
     try:
         target_slide.background.fill.copy(source_slide.background.fill)
     except Exception:
@@ -46,6 +47,7 @@ def duplicate_slide(prs, source_slide):
     for shape in source_slide.shapes:
         new_el = copy.deepcopy(shape.element)
         target_slide.shapes._spTree.insert_element_before(new_el, 'p:extLst')
+        
     return target_slide
 
 # Smart Parser for Questions
@@ -78,6 +80,7 @@ def parse_raw_text(text):
         
     return questions
 
+# Replace Tags in Slide Text Frames (Original logic that preserves runs, fonts and colors)
 def replace_text_in_slide(slide, replacements):
     for shape in slide.shapes:
         if shape.has_text_frame:
@@ -92,14 +95,18 @@ def replace_text_in_slide(slide, replacements):
                         else:
                             p.text = p.text.replace(key, val)
 
+# 1. /start Command
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
+    await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
     await state.clear()
     await state.set_state(QuizForm.waiting_for_topic)
     await message.reply("<b>📚 Enter the Topic or Subject Name</b>")
 
+# 2. /cancel Command
 @dp.message(Command("cancel"))
 async def cmd_cancel(message: types.Message, state: FSMContext):
+    await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
     current_state = await state.get_state()
     if current_state is None:
         await message.reply("<b>⚠️ No active session found.</b>")
@@ -107,16 +114,21 @@ async def cmd_cancel(message: types.Message, state: FSMContext):
     await state.clear()
     await message.reply("<b>❌ Session Cancelled.</b> Type /start to Reset.")
 
+# 3. Topic Capture
 @dp.message(QuizForm.waiting_for_topic)
 async def process_topic(message: types.Message, state: FSMContext):
+    await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
     topic_name = message.text.strip()
     await state.update_data(topic=topic_name, questions=[])
     await state.set_state(QuizForm.waiting_for_q_count)
     await message.reply("<b>🔢 Enter Total Number of Questions</b>")
 
+# 4. Question Count Capture
 @dp.message(QuizForm.waiting_for_q_count)
 async def process_q_count(message: types.Message, state: FSMContext):
+    await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
     count_text = message.text.strip()
+    
     if not count_text.isdigit():
         await message.reply("⚠️ <b>Please Enter a Valid Number.</b>")
         return
@@ -148,17 +160,24 @@ async def process_q_count(message: types.Message, state: FSMContext):
 async def send_help(message: types.Message):
     help_text = (
         "🤖 <b>RCC PPT BOT - Help Menu</b>\n\n"
-        "• 📝 <b>/start</b> - Create Test Paper\n"
-        "• 📄 <b>/done</b> - Generate PDF\n"
-        "• ❌ <b>/cancel</b> - Cancel Session\n"
+        "Here are the core Functions Available in your Session:\n\n"
+        "• 📝 <b>/start</b> - Create Test Paper (Start a new Session)\n"
+        "• 📄 <b>/done</b> - Generate PDF (Get your Final File)\n"
+        "• ❌ <b>/cancel</b> - Cancel Session (Stop Current Process)\n\n"
+        "💡 <b>How to use:</b>\n"
+        "1. Type <b>/start</b> to Begin a new Test Paper.\n"
+        "2. Send your Questions one by one as Messages.\n"
+        "3. Type <b>/done</b> When you are Finished to Get the File!"
     )
     await message.reply(help_text, parse_mode="HTML")
 
+# 5. Question Collection & PDF Generation
 @dp.message(QuizForm.collecting_questions)
 async def process_questions(message: types.Message, state: FSMContext):
     text = message.text.strip()
     
     if text.lower() == '/done':
+        await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
         user_data = await state.get_data()
         questions_list = user_data.get('questions', [])
         topic_name = user_data.get('topic', 'General Test')
@@ -176,7 +195,7 @@ async def process_questions(message: types.Message, state: FSMContext):
         
         try:
             if not os.path.exists(TEMPLATE_PATH):
-                await message.reply("<b>❌ Template File not Found.</b> Check project root.")
+                await message.reply("<b>❌ Template File not Found in Root Directory!</b>")
                 return
 
             for index, q in enumerate(questions_list, 1):
@@ -201,16 +220,19 @@ async def process_questions(message: types.Message, state: FSMContext):
 
             final_prs.save(output_ppt_path)
             
+            # Convert Generated PPTX to PDF
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, convert_pptx_to_pdf, output_ppt_path, ".")
 
             if os.path.exists(output_pdf_path):
                 os.rename(output_pdf_path, final_pdf_name)
 
+            await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.UPLOAD_DOCUMENT)
+
             pdf_file = types.FSInputFile(final_pdf_name)
             await message.reply_document(
                 pdf_file, 
-                caption=f"<b>📄 Your {topic_name} Test PDF is Ready!</b>\n📌 <b>Topic:</b> {topic_name}\n📊 <b>Total Questions:</b> {total_q}"
+                caption=f"<b>📄 Your {topic_name} Test PDF is Ready!</b>\n\n📌 <b>Topic:</b> {topic_name}\n📊 <b>Total Questions:</b> {total_q}\n\n<b>🔥 BY :- MPC PAWAN 🔥</b>"
             )
 
             for f in (output_ppt_path, final_pdf_name):
@@ -223,7 +245,9 @@ async def process_questions(message: types.Message, state: FSMContext):
             await message.reply(f"<b>❌ PDF Generation Error:</b> {str(e)}")
         return
 
+    await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
     parsed_q = parse_raw_text(text)
+    
     if parsed_q:
         user_data = await state.get_data()
         questions = user_data.get('questions', [])
@@ -232,13 +256,13 @@ async def process_questions(message: types.Message, state: FSMContext):
 
         target = user_data.get('target_count', 0)
         current = len(questions)
-        await message.reply(f"<b>✅ Questions Added ({current}/{target}).</b> Send more or Type /done.")
+        await message.reply(f"<b>✅ Questions Added (Total: {current}/{target}).</b> Send more or Type /done.")
     else:
         await message.reply("<b>⚠️ Invalid Format.</b> Please Check and send Again")
 
-# Dummy Web Server for Render Port Check
+# Dummy Web Server for Render Health Check
 async def handle_ping(request):
-    return web.Response(text="Bot is Running!")
+    return web.Response(text="Bot is Live!")
 
 async def start_web_server():
     app = web.Application()
