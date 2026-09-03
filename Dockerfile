@@ -1,9 +1,8 @@
 FROM python:3.11-slim
 
-# नॉन-इंटरैक्टिव मोड सेट करें ताकि msfonts का एग्रीमेंट अपने आप स्वीकार हो सके
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 1. सिस्टम डिपेंडेंसीज, LibreOffice, curl और सभी मुख्य MS Word / Devanagari फोंट्स एक ही रन ब्लॉक में सुरक्षित तरीके से इंस्टॉल करें
+# 1. सिस्टम डिपेंडेंसीज, LibreOffice, Fontconfig और सारे स्टैंडर्ड फोंट्स इंस्टॉल करें
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice \
     curl \
@@ -24,12 +23,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-lohit-deva \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. कस्टम फोल्डर बनाएं और curl के जरिए Poppins व SanskritText फोंट्स डाउनलोड करें
+# 2. आपके द्वारा उपयोग किए गए विशेष फोंट्स (Monotype Corsiva, SanskritText, Bodoni, Algerian आदि) के लिए कस्टम फोल्डर और डाउनलोड सेटअप
 RUN mkdir -p /usr/share/fonts/truetype/custom && \
-    curl -L https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-ExtraBold.ttf -o /usr/share/fonts/truetype/custom/Poppins-ExtraBold.ttf && \
+    curl -L https://github.com/chillu/sanskrit-font/raw/master/SanskritText.ttf -o /usr/share/fonts/truetype/custom/SanskritText.ttf && \
     curl -L https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Bold.ttf -o /usr/share/fonts/truetype/custom/Poppins-Bold.ttf && \
     curl -L https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Regular.ttf -o /usr/share/fonts/truetype/custom/Poppins-Regular.ttf && \
-    curl -L https://github.com/chillu/sanskrit-font/raw/master/SanskritText.ttf -o /usr/share/fonts/truetype/custom/SanskritText.ttf && \
     fc-cache -f -v
 
 # 3. वर्किंग directory सेट करें
@@ -42,7 +40,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 5. प्रोजेक्ट की बाकी फाइलें कॉपी करें
 COPY . .
 
-# 6. पोर्ट ओपन करें और ऐप रन करें
+# 6. पोर्ट और रन कमांड
 EXPOSE 8080
-
 CMD ["python", "main.py"]
