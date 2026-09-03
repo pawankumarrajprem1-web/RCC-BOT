@@ -1,41 +1,21 @@
-FROM python:3.11-slim
+FROM python:3.10-slim
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-# 1. सिस्टम डिपेंडेंसीज और सभी सुरक्षित फोंट्स इंस्टॉल करें (बिना ttf-mscorefonts के ताकि एरर न आए)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Render पर LibreOffice इंस्टॉल करें (PPT को PDF में कन्वर्ट करने के लिए)
+RUN apt-get update && apt-get install -y \
     libreoffice \
-    curl \
-    fontconfig \
-    ca-certificates \
-    fonts-noto \
-    fonts-noto-core \
-    fonts-noto-ui-core \
-    fonts-noto-extra \
-    fonts-dejavu \
-    fonts-liberation \
-    fonts-samyak-deva \
-    fonts-nakula \
-    fonts-lohit-deva \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. कस्टम फोंट्स (जैसे SanskritText और Poppins) डाउनलोड करें
-RUN mkdir -p /usr/share/fonts/truetype/custom && \
-    curl -L https://github.com/chillu/sanskrit-font/raw/master/SanskritText.ttf -o /usr/share/fonts/truetype/custom/SanskritText.ttf && \
-    curl -L https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Bold.ttf -o /usr/share/fonts/truetype/custom/Poppins-Bold.ttf && \
-    curl -L https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Regular.ttf -o /usr/share/fonts/truetype/custom/Poppins-Regular.ttf && \
-    fc-cache -f -v
-
-# 3. वर्किंग directory सेट करें
 WORKDIR /app
 
-# 4. पाइथन रिक्वायरमेंट्स इंस्टॉल करें
+# Requirements इंस्टॉल करें
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. प्रोजेक्ट की बाकी फाइलें कॉपी करें
+# बाकी सारा कोड कॉपी करें
 COPY . .
 
-# 6. पोर्ट और रन कमांड
+# पोर्ट एक्सपोज़ करें
 EXPOSE 8080
+
+# बॉट चालू करें
 CMD ["python", "main.py"]
