@@ -20,6 +20,7 @@ RUN mkdir -p /usr/share/fonts/truetype/poppins && \
     wget https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-ExtraBold.ttf -O /usr/share/fonts/truetype/poppins/Poppins-ExtraBold.ttf && \
     wget https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Bold.ttf -O /usr/share/fonts/truetype/poppins/Poppins-Bold.ttf && \
     wget https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Regular.ttf -O /usr/share/fonts/truetype/poppins/Poppins-Regular.ttf && \
+    wget -q https://github.com/google/fonts/raw/main/ofl/notosansdevanagari/NotoSansDevanagari-Bold.ttf -O /usr/share/fonts/truetype/custom/NotoSansDevanagari-Bold.ttf && \
     fc-cache -f -v
 
 WORKDIR /app
