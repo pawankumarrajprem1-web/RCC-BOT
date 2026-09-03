@@ -1,21 +1,35 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
-# Render पर LibreOffice इंस्टॉल करें (PPT को PDF में कन्वर्ट करने के लिए)
-RUN apt-get update && apt-get install -y \
+# System dependencies & Hindi/Devanagari Fonts install
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice \
+    wget \
+    curl \
+    fontconfig \
+    fonts-noto-core \
+    fonts-noto-ui-core \
+    fonts-dejavu \
+    fonts-liberation \
+    fonts-gargi \
+    fonts-kalapi \
+    fonts-samyak-deva \
     && rm -rf /var/lib/apt/lists/*
+
+# Custom Google Fonts (Poppins & Devanagari Support) download
+RUN mkdir -p /usr/share/fonts/truetype/custom && \
+    wget -q https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-ExtraBold.ttf -O /usr/share/fonts/truetype/custom/Poppins-ExtraBold.ttf && \
+    wget -q https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Bold.ttf -O /usr/share/fonts/truetype/custom/Poppins-Bold.ttf && \
+    wget -q https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Regular.ttf -O /usr/share/fonts/truetype/custom/Poppins-Regular.ttf && \
+    wget -q https://github.com/google/fonts/raw/main/ofl/notosansdevanagari/NotoSansDevanagari-Bold.ttf -O /usr/share/fonts/truetype/custom/NotoSansDevanagari-Bold.ttf && \
+    fc-cache -f -v
 
 WORKDIR /app
 
-# Requirements इंस्टॉल करें
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# बाकी सारा कोड कॉपी करें
 COPY . .
 
-# पोर्ट एक्सपोज़ करें
 EXPOSE 8080
 
-# बॉट चालू करें
 CMD ["python", "main.py"]
