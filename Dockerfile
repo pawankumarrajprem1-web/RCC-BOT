@@ -1,10 +1,9 @@
 FROM python:3.10-slim
 
-# LibreOffice, fontconfig और हिंदी के बेसिक फॉन्ट्स इंस्टॉल करें
+# LibreOffice और fontconfig इंस्टॉल करें
 RUN apt-get update && apt-get install -y \
     libreoffice \
     fontconfig \
-    fonts-noto-devanagari \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
