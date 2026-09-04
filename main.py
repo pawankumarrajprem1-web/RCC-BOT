@@ -18,7 +18,7 @@ from aiogram.enums import ParseMode, ChatAction
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BotCommand
 
 from pptx import Presentation
-from docx import Document
+from docxtpl import DocxTemplate
 from pymongo import MongoClient
 
 # ==================== CONFIGURATION ====================
@@ -212,73 +212,52 @@ async def generate_and_send(chat_id, doc_id, gen_type):
                     for el in base_shapes_elements:
                         target_slide.shapes._spTree.insert_element_before(copy.deepcopy(el), 'p:extLst')
                 
+                # एडवांस्ड मल्टी-रन रिप्लेसमेंट ताकि PPT में टैग्स सही से बदल जाएं
                 for shape in target_slide.shapes:
                     if shape.has_text_frame:
-                        for p in shape.text_frame.paragraphs:
-                            full_p_text = "".join(r.text for r in p.runs)
+                        for paragraph in shape.text_frame.paragraphs:
+                            full_p_text = "".join(run.text for run in paragraph.runs)
+                            changed = False
                             for key, val in replacements.items():
-                                if key in full_p_text or key in p.text:
-                                    if len(p.runs) > 0:
-                                        p.runs[0].text = p.text.replace(key, val)
-                                        for r in p.runs[1:]: 
-                                            r.text = ""
-                                    else:
-                                        p.text = p.text.replace(key, val)
+                                if key in full_p_text:
+                                    full_p_text = full_p_text.replace(key, str(val))
+                                    changed = True
+                            if changed and paragraph.runs:
+                                paragraph.runs[0].text = full_p_text
+                                for run in paragraph.runs[1:]:
+                                    run.text = ""
 
             prs.save(output_file)
             await loop.run_in_executor(None, convert_to_pdf, output_file, temp_dir)
 
-        else: # DOCX Formats (Test PDF & Answer Test PDF) - बिना template.docx के लूप के सीधे python-docx से जनरेट होगा
+        else: # DOCX Formats (Test PDF & Answer Test PDF) - docxtpl के साथ सही डेटा मैपिंग
             if not os.path.exists(DOCX_TEMPLATE):
                 await msg.edit_text("❌ <b>Template Missing:</b> `template.docx` नहीं मिला!")
                 return
                 
             output_file = os.path.join(temp_dir, f"temp_{doc_id}.docx")
-            show_answers = (gen_type == "Answer Test PDF")
             
-            doc = Document(DOCX_TEMPLATE)
-            
-            p_topic = doc.add_paragraph()
-            p_topic.add_run(f"📌 {topic}").bold = True
-            doc.add_paragraph()
-
+            # प्रश्नों की लिस्ट को docxtpl के लिए तैयार करना
+            formatted_questions = []
             for i, q in enumerate(parsed_qs, 1):
-                doc.add_paragraph(f"Q{i}. {q['text']}")
-                
-                table = doc.add_table(rows=2, cols=2)
-                cell_00 = table.cell(0, 0)
-                cell_01 = table.cell(0, 1)
-                cell_10 = table.cell(1, 0)
-                cell_11 = table.cell(1, 1)
-                
-                a_text = q['a'].replace("✅", "").replace("*", "").strip()
-                b_text = q['b'].replace("✅", "").replace("*", "").strip()
-                c_text = q['c'].replace("✅", "").replace("*", "").strip()
-                d_text = q['d'].replace("✅", "").replace("*", "").strip()
-                
-                p_a = cell_00.paragraphs[0]
-                run_a = p_a.add_run(f"(a) {a_text}")
-                if show_answers and ("✅" in q['a'] or "*" in q['a']):
-                    run_a.bold = True
-                
-                p_b = cell_01.paragraphs[0]
-                run_b = p_b.add_run(f"(b) {b_text}")
-                if show_answers and ("✅" in q['b'] or "*" in q['b']):
-                    run_b.bold = True
-                
-                p_c = cell_10.paragraphs[0]
-                run_c = p_c.add_run(f"(c) {c_text}")
-                if show_answers and ("✅" in q['c'] or "*" in q['c']):
-                    run_c.bold = True
-                
-                p_d = cell_11.paragraphs[0]
-                run_d = p_d.add_run(f"(d) {d_text}")
-                if show_answers and ("✅" in q['d'] or "*" in q['d']):
-                    run_d.bold = True
-                
-                doc.add_paragraph()
+                formatted_questions.append({
+                    'id': i,
+                    'text': q['text'],
+                    'a': f"(a) {q['a']}",
+                    'b': f"(b) {q['b']}",
+                    'c': f"(c) {q['c']}",
+                    'd': f"(d) {q['d']}"
+                })
 
+            context = {
+                'topic_name': topic,
+                'questions': formatted_questions
+            }
+            
+            doc = DocxTemplate(DOCX_TEMPLATE)
+            doc.render(context)
             doc.save(output_file)
+            
             await loop.run_in_executor(None, convert_to_pdf, output_file, temp_dir)
 
         generated_pdf_path = output_file.rsplit('.', 1)[0] + ".pdf"
@@ -573,4 +552,4 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    asyncio.main(main()) if hasattr(asyncio, 'main') else asyncio.run(main())
