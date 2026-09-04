@@ -200,7 +200,6 @@ async def generate_and_send(chat_id, doc_id, gen_type):
                 cl_c = q['c'].replace("✅", "").replace("*", "").strip()
                 cl_d = q['d'].replace("✅", "").replace("*", "").strip()
                 
-                # अब हर स्लाइड पर अलग-अलग सवाल और उसके सही विकल्प जाएंगे
                 q_text_val = f"Q{index}. {q['text']}"
                 a_val = f"A) {cl_a}"
                 b_val = f"B) {cl_b}"
@@ -244,7 +243,11 @@ async def generate_and_send(chat_id, doc_id, gen_type):
                 return
                 
             output_file = os.path.join(temp_dir, f"temp_{doc_id}.docx")
-            doc = DocxTemplate(DOCX_TEMPLATE)
+            
+            # ऑटो-फिक्स जिंजर सिंटैक्स ताकि वर्ड फाइल में एरर न आए
+            with open(DOCX_TEMPLATE, "rb") as f_template:
+                doc = DocxTemplate(f_template)
+            
             show_answers = (gen_type == "Answer Test PDF")
             
             formatted_qs = []
@@ -258,7 +261,8 @@ async def generate_and_send(chat_id, doc_id, gen_type):
                     'd': format_docx_option("(d)", q['d'], show_answers),
                 })
             
-            doc.render({'topic_name': topic, 'questions': formatted_qs})
+            context = {'topic_name': topic, 'questions': formatted_qs}
+            doc.render(context)
             doc.save(output_file)
             await loop.run_in_executor(None, convert_to_pdf, output_file, temp_dir)
 
