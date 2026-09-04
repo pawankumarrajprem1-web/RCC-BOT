@@ -244,9 +244,8 @@ async def generate_and_send(chat_id, doc_id, gen_type):
                 
             output_file = os.path.join(temp_dir, f"temp_{doc_id}.docx")
             
-            # ऑटो-फिक्स जिंजर सिंटैक्स ताकि वर्ड फाइल में एरर न आए
-            with open(DOCX_TEMPLATE, "rb") as f_template:
-                doc = DocxTemplate(f_template)
+            # फिक्स: फाइल पाथ का उपयोग करके 'seek of closed file' एरर पूरी तरह खत्म
+            doc = DocxTemplate(DOCX_TEMPLATE)
             
             show_answers = (gen_type == "Answer Test PDF")
             
@@ -449,7 +448,7 @@ async def ask_questions(callback: CallbackQuery, state: FSMContext):
         f"✅ आपने <b>{fmt}</b> चुना है।\n\n"
         "👇 <b>कृपया अपने प्रश्न इस फॉर्मेट में भेजें:</b>\n"
         f"<code>{sample}</code>\n\n"
-        "📌 <i>नोट: प्रश्न भेजने के बाद <b>/done</b> टाइप करें।\n"
+        "📌 <i>नोट: प्रश्न भेजने के बाद चाहें तो और भेजें, समाप्त होने पर <b>/done</b> टाइप करें।\n"
         "रद्द करने के लिए <b>/cancel</b> दबाएं।</i>"
     )
     await callback.message.edit_text(msg)
@@ -550,12 +549,21 @@ async def start_web_server():
     await site.start()
 
 async def main():
+    # पुरानी वेब सर्विस और पोलिंग संघर्ष रोकने के लिए
     await start_web_server()
     await setup_bot_commands(bot)
+    
+    # ड्रॉप पेंडिंग अपडेट्स ताकि Conflict Error न आए
+    await bot.delete_webhook(drop_pending_updates=True)
+    
     print("\n" + "="*50)
     print("🚀 RCC PROFESSIONAL BOT IS LIVE AND RUNNING!")
     print("="*50 + "\n")
+    
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        print("Bot Stopped!")
