@@ -18,7 +18,7 @@ from aiogram.enums import ParseMode, ChatAction
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BotCommand
 
 from pptx import Presentation
-from docxtpl import DocxTemplate
+from docxtpl import DocxTemplate, RichText
 from pymongo import MongoClient
 
 # ==================== CONFIGURATION ====================
@@ -78,6 +78,7 @@ def convert_to_pdf(input_file, output_dir="."):
     abs_output = os.path.abspath(os.path.join(output_dir, out_name))
 
     if os.name == 'nt':  # Windows PC
+        # 1. LibreOffice चेक करें
         libre_paths = [
             r"C:\Program Files\LibreOffice\program\soffice.exe",
             r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
@@ -92,6 +93,7 @@ def convert_to_pdf(input_file, output_dir="."):
             except Exception:
                 continue
 
+        # 2. अगर LibreOffice न मिले तो MS PowerPoint (win32com) का उपयोग करें
         if input_file.endswith('.pptx') or input_file.endswith('.ppt'):
             try:
                 import win32com.client
@@ -109,6 +111,7 @@ def convert_to_pdf(input_file, output_dir="."):
             except Exception:
                 raise Exception("Windows पर PPT को PDF बनाने के लिए MS PowerPoint का होना आवश्यक है!")
 
+        # 3. DOCX फ़ाइलों के लिए docx2pdf
         if input_file.endswith('.docx'):
             try:
                 from docx2pdf import convert
@@ -151,6 +154,20 @@ def parse_raw_text(raw_text):
         })
     return questions_list
 
+def format_docx_option(label, opt_text, show_answer=False):
+    """DOCX फ़ाइल में सही उत्तर को Bold करने का फ़ंक्शन"""
+    if not opt_text: 
+        return ""
+    rt = RichText()
+    is_answer = "✅" in opt_text or "*" in opt_text
+    cleaned = opt_text.replace("✅", "").replace("*", "").strip()
+    
+    if show_answer and is_answer:
+        rt.add(f"{label} {cleaned}", bold=True)
+    else:
+        rt.add(f"{label} {cleaned}", bold=False)
+    return rt
+
 
 # ==================== PDF GENERATION ENGINE ====================
 
@@ -186,8 +203,7 @@ async def generate_and_send(chat_id, doc_id, gen_type):
                 
             output_file = os.path.join(temp_dir, f"temp_{doc_id}.pptx")
             prs = Presentation(PPT_TEMPLATE)
-            base_slide = prs.slides[0]
-            base_shapes_elements = [copy.deepcopy(shape.element) for shape in base_slide.shapes]
+            slide = prs.slides[0]
             
             for index, q in enumerate(parsed_qs, 1):
                 cl_a = q['a'].replace("✅", "").replace("*", "").strip()
@@ -195,69 +211,59 @@ async def generate_and_send(chat_id, doc_id, gen_type):
                 cl_c = q['c'].replace("✅", "").replace("*", "").strip()
                 cl_d = q['d'].replace("✅", "").replace("*", "").strip()
                 
-                question_block = f"Q{index}. {q['text']}\n\nA) {cl_a}\nB) {cl_b}\nC) {cl_c}\nD) {cl_d}"
-                
                 replacements = {
                     '{{TOPIC}}': topic, 
-                    '{{QUESTION}}': question_block,
-                    '{{OPTION_A}}': "", 
-                    '{{OPTION_B}}': "",
-                    '{{OPTION_C}}': "", 
-                    '{{OPTION_D}}': ""
+                    '{{QUESTION}}': f"Q{index}. {q['text']}",
+                    '{{OPTION_A}}': f"A) {cl_a}", 
+                    '{{OPTION_B}}': f"B) {cl_b}",
+                    '{{OPTION_C}}': f"C) {cl_c}", 
+                    '{{OPTION_D}}': f"D) {cl_d}"
                 }
                 
-                target_slide = base_slide if index == 1 else prs.slides.add_slide(prs.slide_layouts[6])
-                
+                target_slide = slide if index == 1 else prs.slides.add_slide(prs.slide_layouts[6])
                 if index != 1:
-                    for el in base_shapes_elements:
-                        target_slide.shapes._spTree.insert_element_before(copy.deepcopy(el), 'p:extLst')
+                    for shape in slide.shapes:
+                        new_el = copy.deepcopy(shape.element)
+                        target_slide.shapes._spTree.insert_element_before(new_el, 'p:extLst')
                 
-                # एडवांस्ड मल्टी-रन रिप्लेसमेंट ताकि PPT में टैग्स सही से बदल जाएं
                 for shape in target_slide.shapes:
                     if shape.has_text_frame:
-                        for paragraph in shape.text_frame.paragraphs:
-                            full_p_text = "".join(run.text for run in paragraph.runs)
-                            changed = False
+                        for p in shape.text_frame.paragraphs:
+                            full_p_text = "".join(r.text for r in p.runs)
                             for key, val in replacements.items():
-                                if key in full_p_text:
-                                    full_p_text = full_p_text.replace(key, str(val))
-                                    changed = True
-                            if changed and paragraph.runs:
-                                paragraph.runs[0].text = full_p_text
-                                for run in paragraph.runs[1:]:
-                                    run.text = ""
+                                if key in full_p_text or key in p.text:
+                                    if len(p.runs) > 0:
+                                        p.runs[0].text = p.text.replace(key, val)
+                                        for r in p.runs[1:]: 
+                                            r.text = ""
+                                    else:
+                                        p.text = p.text.replace(key, val)
 
             prs.save(output_file)
             await loop.run_in_executor(None, convert_to_pdf, output_file, temp_dir)
 
-        else: # DOCX Formats (Test PDF & Answer Test PDF) - docxtpl के साथ सही डेटा मैपिंग
+        else: # DOCX Formats (Test PDF & Answer Test PDF)
             if not os.path.exists(DOCX_TEMPLATE):
                 await msg.edit_text("❌ <b>Template Missing:</b> `template.docx` नहीं मिला!")
                 return
                 
             output_file = os.path.join(temp_dir, f"temp_{doc_id}.docx")
-            
-            # प्रश्नों की लिस्ट को docxtpl के लिए तैयार करना
-            formatted_questions = []
-            for i, q in enumerate(parsed_qs, 1):
-                formatted_questions.append({
-                    'id': i,
-                    'text': q['text'],
-                    'a': f"(a) {q['a']}",
-                    'b': f"(b) {q['b']}",
-                    'c': f"(c) {q['c']}",
-                    'd': f"(d) {q['d']}"
-                })
-
-            context = {
-                'topic_name': topic,
-                'questions': formatted_questions
-            }
-            
             doc = DocxTemplate(DOCX_TEMPLATE)
-            doc.render(context)
-            doc.save(output_file)
+            show_answers = (gen_type == "Answer Test PDF")
             
+            formatted_qs = []
+            for i, q in enumerate(parsed_qs, 1):
+                formatted_qs.append({
+                    'id': i, 
+                    'text': q['text'],
+                    'a': format_docx_option("(a)", q['a'], show_answers),
+                    'b': format_docx_option("(b)", q['b'], show_answers),
+                    'c': format_docx_option("(c)", q['c'], show_answers),
+                    'd': format_docx_option("(d)", q['d'], show_answers),
+                })
+            
+            doc.render({'topic_name': topic, 'questions': formatted_qs})
+            doc.save(output_file)
             await loop.run_in_executor(None, convert_to_pdf, output_file, temp_dir)
 
         generated_pdf_path = output_file.rsplit('.', 1)[0] + ".pdf"
@@ -324,9 +330,10 @@ async def cmd_create(message: types.Message, state: FSMContext):
 @dp.message(Command("prompt"), StateFilter("*"))
 @dp.callback_query(F.data == "btn_prompt")
 async def cmd_prompt(event: types.Message | CallbackQuery):
+    """Gemini AI से फोटो / PDF से प्रश्न बनवाने का Master Prompt"""
     prompt_text = (
         "✨ <b>Gemini AI क्विज़ मेकर प्रॉम्प्ट (Master Prompt)</b>\n\n"
-        "अगर आपके पास किसी <b>किताब की फोटो, AI, PYQ, PDF या थ्योरी नोट्स</b> हैं, या फिर आप टॉपिक के नाम से प्रश्न बनवाना चाहते हैं, तो नीचे दिए गए बॉक्स पर क्लिक करके <b>Copy</b> करें:\n\n"
+        "अगर आपके पास किसी <b>किताब की फोटो, AI, PYQ, PDF या थ्योरी नोट्स</b> हैं, या फिर आप टॉपिक के नाम से प्रश्न बनवाना चाहते हैं, तो नीचे दिए गए बॉक्स पर क्लिक करके <b> Copy</b>  करें:\n\n"
         "<code>विषय/टॉपिक (Topic Name): [यहाँ अपना टॉपिक लिखें या खाली छोड़ें अगर PDF अटैच है]\n"
         "प्रश्नों की संख्या (Total Questions): [जितने प्रश्न चाहिए जैसे 30, 50 लिखें]\n\n"
         "कृपया दिए गए Photo / PDF / PYQ / थ्योरी नोट्स को ध्यान से पढ़ें और इनसे ऑब्जेक्टिव प्रश्न (MCQs) बनाकर मुझे बिल्कुल इसी फॉर्मेट में दें:\n\n"
@@ -342,8 +349,8 @@ async def cmd_prompt(event: types.Message | CallbackQuery):
         "4. उत्तर देने में कोई भी फालतू बात या परिचय न लिखें। सिर्फ और सिर्फ प्रश्नों की लिस्ट दें।\n"
         "5. आपके द्वारा दिए जाने वाले सारे के सारे प्रश्न एक ही सिंगल कोडिंग बॉक्स (Code Block) के अंदर होने चाहिए, ताकि एक क्लिक में पूरा टेक्स्ट कॉपी किया जा सके।</code>\n\n"
         "📌 <b>उपयोग करने की विधि:</b>\n"
-        "1. ऊपर दिए गए कोड पर टैप करके <b>Copy</b> करें।\n"
-        "2. <b>Google Gemini App</b> (या चैट) में जाएं।\n"
+        "1. ऊपर दिए गए कोड पर टैप करके <b> Copy</b>  करें।\n"
+        "2. <b> Google Gemini App</b>  (या चैट) में जाएं।\n"
         "3. अपनी फोटो / PDF अटैच करें (या बिना अटैच किए टॉपिक और प्रश्नों की संख्या भरें) और यह Prompt पेस्ट करके भेजें।\n"
         "4. Gemini से मिले उत्तर को सीधे कॉपी करके यहाँ बॉट में <b>/create</b> दबाकर पेस्ट कर दें!"
     )
@@ -552,4 +559,4 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
-    asyncio.main(main()) if hasattr(asyncio, 'main') else asyncio.run(main())
+    asyncio.run(main())
