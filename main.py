@@ -18,7 +18,7 @@ from aiogram.enums import ParseMode, ChatAction
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BotCommand
 
 from pptx import Presentation
-from docxtpl import DocxTemplate, RichText
+from docx import Document
 from pymongo import MongoClient
 
 # ==================== CONFIGURATION ====================
@@ -151,20 +151,6 @@ def parse_raw_text(raw_text):
         })
     return questions_list
 
-def format_docx_option(label, opt_text, show_answer=False):
-    """DOCX फ़ाइल में सही उत्तर को Bold करने का फ़ंक्शन"""
-    if not opt_text: 
-        return ""
-    rt = RichText()
-    is_answer = "✅" in opt_text or "*" in opt_text
-    cleaned = opt_text.replace("✅", "").replace("*", "").strip()
-    
-    if show_answer and is_answer:
-        rt.add(f"{label} {cleaned}", bold=True)
-    else:
-        rt.add(f"{label} {cleaned}", bold=False)
-    return rt
-
 
 # ==================== PDF GENERATION ENGINE ====================
 
@@ -184,7 +170,6 @@ async def generate_and_send(chat_id, doc_id, gen_type):
     raw_text = row["raw_text"]
     parsed_qs = parse_raw_text(raw_text)
     
-    # यहाँ टाइपिंग एक्शन जोड़ दिया गया है ताकि जेनरेट होते वक्त टाइपिंग लिखा आए
     await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     msg = await bot.send_message(chat_id, f"⏳ <b>{gen_type}</b> जनरेट हो रहा है, कृपया प्रतीक्षा करें...")
 
@@ -210,7 +195,6 @@ async def generate_and_send(chat_id, doc_id, gen_type):
                 cl_c = q['c'].replace("✅", "").replace("*", "").strip()
                 cl_d = q['d'].replace("✅", "").replace("*", "").strip()
                 
-                # सिंगल टेक्स्ट बॉक्स लेआउट के लिए प्रश्न और सभी विकल्प एक साथ फॉर्मेट किए गए हैं
                 question_block = f"Q{index}. {q['text']}\n\nA) {cl_a}\nB) {cl_b}\nC) {cl_c}\nD) {cl_d}"
                 
                 replacements = {
@@ -244,27 +228,56 @@ async def generate_and_send(chat_id, doc_id, gen_type):
             prs.save(output_file)
             await loop.run_in_executor(None, convert_to_pdf, output_file, temp_dir)
 
-        else: # DOCX Formats (Test PDF & Answer Test PDF)
+        else: # DOCX Formats (Test PDF & Answer Test PDF) - बिना template.docx के लूप के सीधे python-docx से जनरेट होगा
             if not os.path.exists(DOCX_TEMPLATE):
                 await msg.edit_text("❌ <b>Template Missing:</b> `template.docx` नहीं मिला!")
                 return
                 
             output_file = os.path.join(temp_dir, f"temp_{doc_id}.docx")
-            doc = DocxTemplate(DOCX_TEMPLATE)
             show_answers = (gen_type == "Answer Test PDF")
             
-            formatted_qs = []
-            for i, q in enumerate(parsed_qs, 1):
-                formatted_qs.append({
-                    'id': i, 
-                    'text': q['text'],
-                    'a': format_docx_option("(a)", q['a'], show_answers),
-                    'b': format_docx_option("(b)", q['b'], show_answers),
-                    'c': format_docx_option("(c)", q['c'], show_answers),
-                    'd': format_docx_option("(d)", q['d'], show_answers),
-                })
+            doc = Document(DOCX_TEMPLATE)
             
-            doc.render({'topic_name': topic, 'questions': formatted_qs})
+            p_topic = doc.add_paragraph()
+            p_topic.add_run(f"📌 {topic}").bold = True
+            doc.add_paragraph()
+
+            for i, q in enumerate(parsed_qs, 1):
+                doc.add_paragraph(f"Q{i}. {q['text']}")
+                
+                table = doc.add_table(rows=2, cols=2)
+                cell_00 = table.cell(0, 0)
+                cell_01 = table.cell(0, 1)
+                cell_10 = table.cell(1, 0)
+                cell_11 = table.cell(1, 1)
+                
+                a_text = q['a'].replace("✅", "").replace("*", "").strip()
+                b_text = q['b'].replace("✅", "").replace("*", "").strip()
+                c_text = q['c'].replace("✅", "").replace("*", "").strip()
+                d_text = q['d'].replace("✅", "").replace("*", "").strip()
+                
+                p_a = cell_00.paragraphs[0]
+                run_a = p_a.add_run(f"(a) {a_text}")
+                if show_answers and ("✅" in q['a'] or "*" in q['a']):
+                    run_a.bold = True
+                
+                p_b = cell_01.paragraphs[0]
+                run_b = p_b.add_run(f"(b) {b_text}")
+                if show_answers and ("✅" in q['b'] or "*" in q['b']):
+                    run_b.bold = True
+                
+                p_c = cell_10.paragraphs[0]
+                run_c = p_c.add_run(f"(c) {c_text}")
+                if show_answers and ("✅" in q['c'] or "*" in q['c']):
+                    run_c.bold = True
+                
+                p_d = cell_11.paragraphs[0]
+                run_d = p_d.add_run(f"(d) {d_text}")
+                if show_answers and ("✅" in q['d'] or "*" in q['d']):
+                    run_d.bold = True
+                
+                doc.add_paragraph()
+
             doc.save(output_file)
             await loop.run_in_executor(None, convert_to_pdf, output_file, temp_dir)
 
