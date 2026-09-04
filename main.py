@@ -28,8 +28,8 @@ MONGO_URI = os.getenv(
     "mongodb+srv://mpcpawan:RswOqZ4uy3UQtM3Q@cluster0.edkvmpu.mongodb.net/"
 )
 
-# यदि आप खुद एडमिन हैं तो अपनी Telegram ID यहाँ लिख सकते हैं (वैकल्पिक)
-ADMIN_IDS = [123456789] # अपनी या ऑथराइज्ड एडमिन आईडी यहाँ जोड़ सकते हैं
+# आपकी दी गई एडमिन आईडी (MPC PAWAN)
+ADMIN_IDS = [826246110]
 
 BASE_DIR = os.path.dirname(__file__)
 PPT_TEMPLATE = os.path.join(BASE_DIR, "template.pptx")
@@ -54,9 +54,12 @@ async def setup_bot_commands(bot_instance: Bot):
     commands = [
         BotCommand(command="start", description="🤖 बॉट शुरू करें"),
         BotCommand(command="create", description="📝 नया टेस्ट बनाएं"),
+        BotCommand(command="mytests", description="📂 सभी टेस्ट देखें, डिलीट करें या PDF बनाएं"),
         BotCommand(command="prompt", description="✨ Gemini AI Prompt (फोटो/PDF से प्रश्न बनाएं)"),
-        BotCommand(command="mytests", description="📂 सभी टेस्ट देखें और मैनेज करें"),
-        BotCommand(command="cancel", description="❌ चालू प्रक्रिया रद्द करें"),
+        BotCommand(command="ppt", description="📊 PPT PDF बनाएं (/ppt ID)"),
+        BotCommand(command="test", description="📄 Test PDF बनाएं (/test ID)"),
+        BotCommand(command="answer", description="✅ Answer PDF बनाएं (/answer ID)"),
+        BotCommand(command="cancel", description="❌ प्रक्रिया रद्द करें"),
         BotCommand(command="help", description="❓ सहायता एवं निर्देश"),
         BotCommand(command="stats", description="📈 कुल टेस्ट के आंकड़े"),
     ]
@@ -224,7 +227,6 @@ async def generate_and_send(chat_id, doc_id, gen_type):
             
             formatted_qs = []
             for i, q in enumerate(parsed_qs, 1):
-                # यहाँ सुनिश्चित किया गया है कि ऑप्शन सही से पास हों
                 formatted_qs.append({
                     'id': i, 
                     'text': q['text'],
@@ -266,7 +268,7 @@ async def generate_and_send(chat_id, doc_id, gen_type):
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
     welcome_text = (
-        "🤖 <b>Rajesh Competition Centre Bot में आपका स्वागत है!</b>\n\n"
+        "🤖 <b>Rajesh Competition Centre Bot में आपका स्वागत है!्</b>\n\n"
         "• /create - नया टेस्ट बनाएं\n"
         "• /mytests - सभी टेस्ट देखें, डिलीट करें या PDF बनाएं\n"
         "• /prompt - Gemini AI प्रॉम्प्ट\n"
@@ -291,14 +293,14 @@ async def cmd_create(message: types.Message, state: FSMContext):
     await message.reply("🎯 <b>कृपया अपने टेस्ट पेपर का नाम (Topic Name) दर्ज करें:</b>")
 
 
-# ==================== ADVANCED PAGINATION & ADMIN MANAGER ====================
+# ==================== PAGINATION & ADMIN MANAGER ====================
 
 @dp.message(Command("mytests"), StateFilter("*"))
 async def cmd_mytests(message: types.Message):
     await show_tests_list(message, page=0)
 
 async def show_tests_list(target: types.Message | CallbackQuery, page: int = 0):
-    limit = 8 # एक पेज पर 8 टेस्ट दिखेंगे
+    limit = 8
     skip = page * limit
     
     try:
@@ -320,7 +322,7 @@ async def show_tests_list(target: types.Message | CallbackQuery, page: int = 0):
             await target.reply(msg)
         return
 
-    text = f"📂 <b>डेटाबेस टेस्ट मैनेजर (कुल टेस्ट: {total_count})</b>\nपेज {page + 1} / {(total_count + limit - 1) // limit}\n\n"
+    text = f"📂 <b>एडमिन डेटाबेस मैनेजर (कुल टेस्ट: {total_count})</b>\nपेज {page + 1} / {(total_count + limit - 1) // limit}\n\n"
     
     keyboard_buttons = []
     for r in records:
@@ -328,7 +330,6 @@ async def show_tests_list(target: types.Message | CallbackQuery, page: int = 0):
         topic = r.get('topic', 'N/A')[:25]
         text += f"🆔 <code>{doc_id}</code> | 📌 {topic}\n"
         
-        # हर टेस्ट के लिए शॉर्टकट बटन (Test PDF, Answer PDF, Delete)
         keyboard_buttons.append([
             InlineKeyboardButton(text=f"📌 {topic}", callback_data=f"view_t_{doc_id}"),
             InlineKeyboardButton(text="📄 Test", callback_data=f"gen_Test_{doc_id}"),
@@ -336,7 +337,6 @@ async def show_tests_list(target: types.Message | CallbackQuery, page: int = 0):
             InlineKeyboardButton(text="🗑️ Delete", callback_data=f"del_{doc_id}_{page}")
         ])
 
-    # Next / Previous Pagination Buttons
     nav_buttons = []
     if page > 0:
         nav_buttons.append(InlineKeyboardButton(text="⬅️ Previous", callback_data=f"list_tests_{page - 1}"))
@@ -369,7 +369,7 @@ async def pagination_callback(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("gen_"))
 async def inline_generate_pdf(callback: CallbackQuery):
     parts = callback.data.split("_")
-    gen_type_key = parts[1] # Test या Ans
+    gen_type_key = parts[1]
     doc_id = parts[2]
     
     gen_type = "Answer Test PDF" if gen_type_key == "Ans" else "Test PDF"
@@ -383,12 +383,17 @@ async def delete_test_callback(callback: CallbackQuery):
     doc_id = parts[1]
     page = int(parts[2])
     
+    # एडमिन सिक्योरिटी चेक
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("❌ आपके पास इसे डिलीट करने की अनुमति नहीं है!", show_alert=True)
+        return
+        
     try:
         tests_col.delete_one({"_id": doc_id})
-        await callback.answer(f"🗑️ टेस्ट ID {doc_id} सफलतापूर्वक डिलीट कर दिया गया!")
+        await callback.answer(f"🗑️ टेस्ट ID {doc_id} डिलीट हो गया!")
         await show_tests_list(callback, page=page)
     except Exception as e:
-        await callback.answer(f"❌ डिलीट करने में त्रुटि: {str(e)}")
+        await callback.answer(f"❌ त्रुटि: {str(e)}")
 
 
 @dp.callback_query(F.data.startswith("view_t_"))
@@ -400,10 +405,10 @@ async def view_single_test(callback: CallbackQuery):
         return
         
     info = (
-        f"📌 <b>विवरण:</b>\n"
+        f"📌 <b>टेस्ट विवरण:</b>\n"
         f"🆔 ID: <code>{doc_id}</code>\n"
         f"🎯 Topic: {row.get('topic')}\n\n"
-        f"आप नीचे दिए गए बटनों से इस टेस्ट का PDF डायरेक्ट डाउनलोड कर सकते हैं या डिलीट कर सकते हैं।"
+        f"यहाँ से आप डायरेक्ट PDF डाउनलोड कर सकते हैं या डिलीट कर सकते हैं।"
     )
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -418,7 +423,34 @@ async def view_single_test(callback: CallbackQuery):
     await callback.answer()
 
 
-# ==================== CREATION & HELPER HANDLERS ====================
+# ==================== ID COMMAND HANDLERS ====================
+
+@dp.message(Command("ppt"), StateFilter("*"))
+async def cmd_ppt(message: types.Message):
+    args = message.text.split()
+    if len(args) < 2:
+        await message.reply("⚠️ कृपया ID दर्ज करें। उदाहरण: <code>/ppt A1B2C3</code>")
+        return
+    await generate_and_send(message.chat.id, args[1].upper(), "PPT")
+
+@dp.message(Command("test"), StateFilter("*"))
+async def cmd_test(message: types.Message):
+    args = message.text.split()
+    if len(args) < 2:
+        await message.reply("⚠️ कृपया ID दर्ज करें। उदाहरण: <code>/test A1B2C3</code>")
+        return
+    await generate_and_send(message.chat.id, args[1].upper(), "Test PDF")
+
+@dp.message(Command("answer"), StateFilter("*"))
+async def cmd_answer(message: types.Message):
+    args = message.text.split()
+    if len(args) < 2:
+        await message.reply("⚠️ कृपया ID दर्ज करें। उदाहरण: <code>/answer A1B2C3</code>")
+        return
+    await generate_and_send(message.chat.id, args[1].upper(), "Answer Test PDF")
+
+
+# ==================== OTHER COMMANDS & FLOW ====================
 
 @dp.message(Command("prompt"), StateFilter("*"))
 @dp.callback_query(F.data == "btn_prompt")
@@ -432,8 +464,7 @@ async def cmd_prompt(event: types.Message | CallbackQuery):
         "a) मुंबई\n"
         "b) नई दिल्ली ✅\n"
         "c) कोलकाता\n"
-        "d) चेन्नई\n\n"
-        "नियम: सही उत्तर के विकल्प के आगे '✅' लगाएं और सारा टेक्स्ट एक ही कोड ब्लॉक में दें।</code>"
+        "d) चेन्नई</code>"
     )
     if isinstance(event, CallbackQuery):
         await event.message.reply(prompt_text)
@@ -445,9 +476,9 @@ async def cmd_prompt(event: types.Message | CallbackQuery):
 @dp.callback_query(F.data == "btn_help")
 async def cmd_help(event: types.Message | CallbackQuery):
     text = (
-        "📖 <b>गाइड:</b>\n"
+        "📖 <b>गाइड:्</b>\n"
         "• /create से नया टेस्ट बनाएं।\n"
-        "• /mytests से सारे टेस्ट देखें, नेक्स्ट/प्रीवियस करें, पीडीएफ बनाएं या डिलीट करें।"
+        "• /mytests से सारे टेस्ट देखें, पेज बदलें, पीडीएफ बनाएं या डिलीट करें।"
     )
     if isinstance(event, CallbackQuery):
         await event.message.reply(text)
@@ -535,7 +566,7 @@ async def main():
     await start_web_server()
     await setup_bot_commands(bot)
     await bot.delete_webhook(drop_pending_updates=True)
-    print("🚀 BOT STARTED SUCCESSFULLY WITH ADMIN MANAGER & PAGINATION!")
+    print("🚀 BOT STARTED SUCCESSFULLY WITH ADMIN ID 826246110 & ALL FEATURES!")
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
