@@ -29,21 +29,17 @@ MONGO_URI = os.getenv(
     "mongodb+srv://mpcpawan:RswOqZ4uy3UQtM3Q@cluster0.edkvmpu.mongodb.net/"
 )
 
-# टेंप्लेट फ़ाइलों के पाथ
 BASE_DIR = os.path.dirname(__file__)
 PPT_TEMPLATE = os.path.join(BASE_DIR, "template.pptx")
 DOCX_TEMPLATE = os.path.join(BASE_DIR, "template.docx")
 
-# SSL Certificate फिक्स के साथ MongoDB कनेक्शन
 client = MongoClient(MONGO_URI, tlsCAFile=certifi.where(), serverSelectionTimeoutMS=5000)
 db = client["rcc_quiz_db"]
 tests_col = db["test_papers"]
 
-# Bot & Dispatcher Setup
 bot = Bot(token=API_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher(storage=MemoryStorage())
 
-# FSM States
 class QuizForm(StatesGroup):
     waiting_for_topic = State()
     waiting_for_format = State()
@@ -53,7 +49,6 @@ class QuizForm(StatesGroup):
 # ==================== SET TELEGRAM MENU COMMANDS ====================
 
 async def setup_bot_commands(bot_instance: Bot):
-    """टेलीग्राम के लिए ऑफिशियल कमांड मेन्यू सेट करता है"""
     commands = [
         BotCommand(command="start", description="🤖 बॉट शुरू करें"),
         BotCommand(command="create", description="📝 नया टेस्ट बनाएं"),
@@ -72,12 +67,11 @@ async def setup_bot_commands(bot_instance: Bot):
 # ==================== HELPER FUNCTIONS ====================
 
 def convert_to_pdf(input_file, output_dir="."):
-    """Windows (LibreOffice/MS PowerPoint) और Linux/Render (LibreOffice) के लिए स्मार्ट कनवर्टर"""
     abs_input = os.path.abspath(input_file)
     out_name = os.path.basename(input_file).rsplit('.', 1)[0] + '.pdf'
     abs_output = os.path.abspath(os.path.join(output_dir, out_name))
 
-    if os.name == 'nt':  # Windows PC
+    if os.name == 'nt':
         libre_paths = [
             r"C:\Program Files\LibreOffice\program\soffice.exe",
             r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
@@ -103,7 +97,7 @@ def convert_to_pdf(input_file, output_dir="."):
                 
                 powerpoint = win32com.client.Dispatch("PowerPoint.Application")
                 deck = powerpoint.Presentations.Open(abs_input, WithWindow=False)
-                deck.SaveAs(abs_output, 32)  # 32 = ppSaveAsPDF
+                deck.SaveAs(abs_output, 32)
                 deck.Close()
                 return
             except Exception:
@@ -118,12 +112,11 @@ def convert_to_pdf(input_file, output_dir="."):
                 raise Exception(f"DOCX to PDF Error: {str(e)}")
 
         raise Exception("PDF कनवर्टर फ़ाइल जनरेट करने में असमर्थ रहा।")
-    else:  # Linux / Render Server
+    else:
         cmd = ["libreoffice", "--headless", "--convert-to", "pdf", abs_input, "--outdir", output_dir]
         subprocess.run(cmd, check=True)
 
 def parse_raw_text(raw_text):
-    """प्रश्न और विकल्पों को अलग-अलग पार्स करने का फ़ंक्शन"""
     questions_list = []
     q_blocks = re.split(r'\n(?=\s*\d+[\.\)\-])', '\n' + raw_text.strip())
     
@@ -152,7 +145,6 @@ def parse_raw_text(raw_text):
     return questions_list
 
 def format_docx_option(label, opt_text, show_answer=False):
-    """DOCX फ़ाइल में सही उत्तर को Bold करने का फ़ंक्शन"""
     if not opt_text: 
         return ""
     rt = RichText()
@@ -169,7 +161,6 @@ def format_docx_option(label, opt_text, show_answer=False):
 # ==================== PDF GENERATION ENGINE ====================
 
 async def generate_and_send(chat_id, doc_id, gen_type):
-    """MongoDB से डेटा निकालकर PDF फाइल जनरेट करके टेलीग्राम पर भेजता है"""
     try:
         row = tests_col.find_one({"_id": doc_id})
     except Exception as e:
@@ -209,13 +200,20 @@ async def generate_and_send(chat_id, doc_id, gen_type):
                 cl_c = q['c'].replace("✅", "").replace("*", "").strip()
                 cl_d = q['d'].replace("✅", "").replace("*", "").strip()
                 
-                question_block = f"Q{index}. {q['text']}\n\nA) {cl_a}\nB) {cl_b}\nC) {cl_c}\nD) {cl_d}"
+                # अब हर स्लाइड पर अलग-अलग सवाल और उसके सही विकल्प जाएंगे
+                q_text_val = f"Q{index}. {q['text']}"
+                a_val = f"A) {cl_a}"
+                b_val = f"B) {cl_b}"
+                c_val = f"C) {cl_c}"
+                d_val = f"D) {cl_d}"
                 
                 replacements = {
                     '{{TOPIC}}': topic, 
-                    '{{QUESTION}}': question_block,
-                    '{{OPTION_A}}': "", '{{OPTION_B}}': "",
-                    '{{OPTION_C}}': "", '{{OPTION_D}}': ""
+                    '{{QUESTION}}': q_text_val,
+                    '{{OPTION_A}}': a_val, 
+                    '{{OPTION_B}}': b_val,
+                    '{{OPTION_C}}': c_val, 
+                    '{{OPTION_D}}': d_val
                 }
                 
                 target_slide = base_slide if index == 1 else prs.slides.add_slide(prs.slide_layouts[6])
